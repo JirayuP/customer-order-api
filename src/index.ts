@@ -9,6 +9,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
+const shouldAutoSeed = process.env.AUTO_SEED_ON_EMPTY_DB !== "false";
 
 app.use(cors());
 app.use(express.json());
@@ -66,7 +67,36 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+/**
+ * Populate a newly provisioned database with 25 demonstration orders.
+ * Existing orders are never replaced. Set AUTO_SEED_ON_EMPTY_DB=false to disable.
+ */
+const seedDemoOrdersIfNeeded = async () => {
+  if (!shouldAutoSeed) return;
+
+  try {
+    const orderCount = await prisma.order.count();
+    if (orderCount > 0) {
+      console.log(`Skipping demo seed: ${orderCount} order(s) already exist.`);
+      return;
+    }
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders/seed?count=25`, {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Seed API returned HTTP ${response.status}`);
+    }
+
+    console.log("Created 25 demo orders for the empty database.");
+  } catch (err) {
+    console.error("Unable to seed demo orders automatically:", err);
+  }
+};
+
 const server = app.listen(port, () => {
+  void seedDemoOrdersIfNeeded();
   console.log(`====================================================`);
   console.log(`🚀 Customer & Order Web API running at:`);
   console.log(`👉 http://localhost:${port}`);
